@@ -1,0 +1,150 @@
+version: '3'
+services:
+  mysql5:
+    image: mysql:5.6.26
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - 3305:3306
+    volumes:
+      - ./mysql5/data:/var/lib/mysql
+  mysql8:
+    image: mysql:8.0.28
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - 3308:3306
+    volumes:
+      - ./mysql8/data:/var/lib/mysql
+  nacos_mysql5:
+    image: nacos/nacos-server:latest
+    restart: always
+    environment:
+      - MODE=standalone
+      - SPRING_DATASOURCE_PLATFORM=mysql
+      - MYSQL_SERVICE_HOST=mysql
+      - MYSQL_SERVICE_PORT=3305
+      - MYSQL_DATABASE=nacos
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=root
+    ports:
+      - 8848:8848
+  nacos_mysql8:
+    image: nacos/nacos-server:latest
+    restart: always
+    environment:
+      - MODE=standalone
+      - SPRING_DATASOURCE_PLATFORM=mysql
+      - MYSQL_SERVICE_HOST=mysql
+      - MYSQL_SERVICE_PORT=3308
+      - MYSQL_DATABASE=nacos
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=root
+    ports:
+      - 8849:8848
+  sentinel:
+    image: hashicorp/sentinel
+    restart: always
+    ports:
+      - 8082:8080
+  rabbitmq:
+    image: rabbitmq:latest
+    restart: always
+    environment:
+      - RABBITMQ_DEFAULT_USER=root
+      - RABBITMQ_DEFAULT_PASS=root
+    ports:
+      - 5672:5672
+      - 15672:15672
+  redis:
+    image: redis:latest
+    restart: always
+    environment:
+      - REDIS_PASSWORD=root
+    ports:
+      - 6379:6379
+  elasticsearch:
+    image: elasticsearch:latest
+    restart: always
+    environment:
+      - discovery.type=single-node #单节点模式
+      - ELASTIC_PASSWORD=root
+    ports:
+      - 9200:9200
+      - 9300:9300
+  nginx:
+    image: nginx:latest
+    ports:
+      - 80:80
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+  mongodb:
+    image: mongo:latest
+    ports:
+      - 27017:27017
+    volumes:
+      - ./mongodb/data:/data/db
+  xxl-job-admin:
+    image: xuxueli/xxl-job-admin:2.4.0
+    ports:
+      - 8081:8080
+    environment:
+      - PARAMS_ADMIN_CONFIG_ENV=root
+    volumes:
+      - ./xxl-job-admin:/data/applogs/xxl-job-admin
+  xxl-job-executor:
+    image: robotjerry/xxl-job-executor:latest
+    environment:
+      - PARAMS_ENV=root
+      - PARAMS_ADMIN_ADDRESSES=http://xxl-job-admin:8080/xxl-job-admin
+    volumes:
+      - ./xxl-job-executor:/data/applogs/xxl-job-executor
+  postgres:
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: postgres
+    ports:
+      - 5432:5432
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server
+    restart: always
+    environment:
+      ACCEPT_EULA: Y
+      SA_PASSWORD: root
+      MSSQL_PID: Express
+    ports:
+      - 1433:1433
+  minio:
+    image: minio/minio
+    restart: always
+    ports:
+      - 9000:9000
+    environment:
+      MINIO_ACCESS_KEY: root
+      MINIO_SECRET_KEY: root
+    volumes:
+      - ./minio/data:/data
+    command: server /data
+  jenkins:
+    image: jenkins/jenkins
+    ports:
+      - 8080:8080
+      - 50000:50000
+    volumes:
+      - ./jenkins:/var/jenkins_home
+  zentao:
+    image: easysoft/zentao:latest
+    ports:
+      - 81:80
+    volumes:
+      - ./zentao_data:/app/zentaopms/data
+      - ./zentao_mysql:/var/lib/mysql
+volumes:
+  zentao_data:
+  zentao_mysql:
+  jenkins:
