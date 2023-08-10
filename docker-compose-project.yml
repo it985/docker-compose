@@ -7,8 +7,16 @@ services:
       MYSQL_ROOT_PASSWORD: root
     ports:
       - 3305:3306
+    command:
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_general_ci
+      --explicit_defaults_for_timestamp=true
+      --lower_case_table_names=1 
     volumes:
       - ./mysql5/data:/var/lib/mysql
+      - ./mysql5/conf/my.cnf:/etc/my.cnf
+
   mysql8:
     image: mysql:8.0.28
     restart: always
@@ -16,39 +24,56 @@ services:
       MYSQL_ROOT_PASSWORD: root
     ports:
       - 3308:3306
+    command:
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_general_ci
+      --explicit_defaults_for_timestamp=true
+      --lower_case_table_names=1 
     volumes:
       - ./mysql8/data:/var/lib/mysql
+      - ./mysql8/conf/my.cnf:/etc/my.cnf
+
   nacos_mysql5:
     image: nacos/nacos-server:latest
     restart: always
     environment:
+      - PREFER_HOST_MODE=ip
       - MODE=standalone
       - SPRING_DATASOURCE_PLATFORM=mysql
-      - MYSQL_SERVICE_HOST=mysql
-      - MYSQL_SERVICE_PORT=3305
+      - MYSQL_SERVICE_HOST=mysql5
+      - MYSQL_SERVICE_PORT=3306
       - MYSQL_DATABASE=nacos
       - MYSQL_USER=root
       - MYSQL_PASSWORD=root
+    volumes:
+      - ./nacos_mysql5:/home/nacos/logs
     ports:
       - 8848:8848
+
   nacos_mysql8:
     image: nacos/nacos-server:latest
     restart: always
     environment:
+      - PREFER_HOST_MODE=ip
       - MODE=standalone
       - SPRING_DATASOURCE_PLATFORM=mysql
-      - MYSQL_SERVICE_HOST=mysql
-      - MYSQL_SERVICE_PORT=3308
+      - MYSQL_SERVICE_HOST=mysql8
+      - MYSQL_SERVICE_PORT=3306
       - MYSQL_DATABASE=nacos
       - MYSQL_USER=root
       - MYSQL_PASSWORD=root
     ports:
       - 8849:8848
+    volumes:
+      - ./nacos_mysql8:/home/nacos/logs
+
   sentinel:
     image: hashicorp/sentinel
     restart: always
     ports:
       - 8082:8080
+
   rabbitmq:
     image: rabbitmq:latest
     restart: always
@@ -58,34 +83,45 @@ services:
     ports:
       - 5672:5672
       - 15672:15672
+    volumes:
+      - ./rabbitmq:/var/lib/rabbitmq
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+
   redis:
     image: redis:latest
     restart: always
     environment:
+      - TZ=Asia/Shanghai
       - REDIS_PASSWORD=root
+    command: redis-server /usr/local/etc/redis/redis.conf
     ports:
       - 6379:6379
-  elasticsearch:
-    image: elasticsearch:latest
+    volumes:
+      - /redis/data:/var/lib/redis/data
+      - /redis/redis.conf:/usr/local/etc/redis/redis.conf  
+
+  nginx:
+    image: nginx
+    container_name: nginx
     restart: always
     environment:
-      - discovery.type=single-node #单节点模式
-      - ELASTIC_PASSWORD=root
+      - TZ=Asia/Shanghai
     ports:
-      - 9200:9200
-      - 9300:9300
-  nginx:
-    image: nginx:latest
-    ports:
-      - 80:80
+      - "82:80"
+      - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/log:/var/log/nginx
+      - ./nginx/www:/usr/share/nginx/html
+      - ./nginx/etc/letsencrypt:/etc/letsencrypt
+
   mongodb:
     image: mongo:latest
     ports:
       - 27017:27017
     volumes:
       - ./mongodb/data:/data/db
+
   xxl-job-admin:
     image: xuxueli/xxl-job-admin:2.4.0
     ports:
@@ -94,6 +130,7 @@ services:
       - PARAMS_ADMIN_CONFIG_ENV=root
     volumes:
       - ./xxl-job-admin:/data/applogs/xxl-job-admin
+
   xxl-job-executor:
     image: robotjerry/xxl-job-executor:latest
     environment:
@@ -101,6 +138,7 @@ services:
       - PARAMS_ADMIN_ADDRESSES=http://xxl-job-admin:8080/xxl-job-admin
     volumes:
       - ./xxl-job-executor:/data/applogs/xxl-job-executor
+
   postgres:
     image: postgres
     restart: always
@@ -110,6 +148,7 @@ services:
       POSTGRES_DB: postgres
     ports:
       - 5432:5432
+
   sqlserver:
     image: mcr.microsoft.com/mssql/server
     restart: always
@@ -119,17 +158,20 @@ services:
       MSSQL_PID: Express
     ports:
       - 1433:1433
+
   minio:
     image: minio/minio
     restart: always
     ports:
       - 9000:9000
+    command: server /data
     environment:
       MINIO_ACCESS_KEY: root
       MINIO_SECRET_KEY: root
     volumes:
-      - ./minio/data:/data
-    command: server /data
+      - ./data:/data
+      - ./minio/config:/root/.minio/
+
   jenkins:
     image: jenkins/jenkins
     ports:
@@ -137,6 +179,9 @@ services:
       - 50000:50000
     volumes:
       - ./jenkins:/var/jenkins_home
+    environment:
+      JAVA_OPTS: '-Djava.util.logging.config.file=/var/jenkins_home/log.properties'
+
   zentao:
     image: easysoft/zentao:latest
     ports:
@@ -144,7 +189,59 @@ services:
     volumes:
       - ./zentao_data:/app/zentaopms/data
       - ./zentao_mysql:/var/lib/mysql
+
+  nexus:
+    image: sonatype/nexus3
+    container_name: nexus
+    ports:
+      - 8281:8081
+    volumes:
+      - ./nexus-data:/nexus-data
+    restart: always
+
+  elasticsearch:
+    image: elasticsearch:latest
+    container_name: elasticsearch
+    restart: unless-stopped
+    volumes:
+      - ./elasticsearch/data:/usr/share/elasticsearch/data
+      - ./elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
+      - ./elasticsearch/plugins:/usr/share/elasticsearch/plugins
+    environment:
+      TZ: Asia/Shanghai
+      LANG: en_US.UTF-8
+      discovery.type: single-node
+      ES_JAVA_OPTS: "-Xmx2048m -Xms2048m"
+      ELASTIC_PASSWORD: "root"
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - es
+
+  kibana:
+    image: kibana:latest
+    container_name: kibana
+    restart: unless-stopped
+    environment:
+      - "ELASTICSEARCH_HOSTS=http://elasticsearch:9200"
+      - "ELASTICSEARCH_USERNAME=root"
+      - "ELASTICSEARCH_PASSWORD=root"
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - es
+
+networks:
+  es:
+    driver: bridge
+
 volumes:
   zentao_data:
   zentao_mysql:
   jenkins:
+  nexus-data:
+  elasticsearch:
+    driver: local
